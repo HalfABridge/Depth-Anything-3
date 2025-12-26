@@ -55,7 +55,7 @@ class UIComponents:
             label="Preview",
             columns=4,
             height="300px",
-            show_download_button=True,
+            # show_download_button=True,
             object_fit="contain",
             preview=True,
             interactive=False,
@@ -107,6 +107,55 @@ class UIComponents:
                 visible=False,
             )
         return gs_video, gs_info
+
+    def create_export_data_section(self) -> Tuple[gr.File, gr.File, gr.File]:
+        """
+        Create the export data section with download links for exported files.
+
+        Returns:
+            Tuple of (mini_npz_file, glb_file, feat_vis_files) components
+        """
+        gr.Markdown("### Download Exported Data")
+        gr.Markdown(
+            "All exported formats are generated automatically during reconstruction. "
+            "Click the download buttons below to save the files to your computer."
+        )
+
+        gr.Markdown("#### 📊 mini_npz Format")
+        gr.Markdown(
+            "Minimal NPZ format containing essential data: depth maps, confidence values, "
+            "camera extrinsics, and intrinsics. Lightweight storage for depth data with camera parameters."
+        )
+        mini_npz_file = gr.File(
+            label="Download mini_npz",
+            visible=True,
+            interactive=False,
+        )
+
+        gr.Markdown("#### 🌐 GLB Format")
+        gr.Markdown(
+            "3D visualization format with point cloud and camera poses. Contains point cloud with colors "
+            "from original images and camera wireframes for visualization. Suitable for 3D inspection and analysis."
+        )
+        glb_file = gr.File(
+            label="Download GLB",
+            visible=True,
+            interactive=False,
+        )
+
+        gr.Markdown("#### 🔍 Feature Visualization Videos")
+        gr.Markdown(
+            "Feature visualization videos showing intermediate transformer features from different layers. "
+            "Multiple videos are generated (one per layer: 9, 19, 29, 39)."
+        )
+        feat_vis_files = gr.File(
+            label="Download Feature Visualization Videos",
+            file_count="multiple",
+            visible=True,
+            interactive=False,
+        )
+
+        return mini_npz_file, glb_file, feat_vis_files
 
     def create_depth_section(self) -> Tuple[gr.Button, gr.Dropdown, gr.Button, gr.Image]:
         """

@@ -380,7 +380,7 @@ def image(
         process_res_method=process_res_method,
         export_feat_layers=export_feat_layers,
         use_ray_pose=use_ray_pose,
-        reference_view_strategy=reference_view_strategy,
+        ref_view_strategy=ref_view_strategy,
         conf_thresh_percentile=conf_thresh_percentile,
         num_max_points=num_max_points,
         show_cameras=show_cameras,
@@ -459,7 +459,7 @@ def images(
         process_res_method=process_res_method,
         export_feat_layers=export_feat_layers,
         use_ray_pose=use_ray_pose,
-        reference_view_strategy=reference_view_strategy,
+        ref_view_strategy=ref_view_strategy,
         conf_thresh_percentile=conf_thresh_percentile,
         num_max_points=num_max_points,
         show_cameras=show_cameras,
@@ -546,7 +546,7 @@ def colmap(
         intrinsics=intrinsics,
         align_to_input_ext_scale=align_to_input_ext_scale,
         use_ray_pose=use_ray_pose,
-        reference_view_strategy=reference_view_strategy,
+        ref_view_strategy=ref_view_strategy,
         conf_thresh_percentile=conf_thresh_percentile,
         num_max_points=num_max_points,
         show_cameras=show_cameras,
@@ -623,7 +623,7 @@ def video(
         process_res_method=process_res_method,
         export_feat_layers=export_feat_layers,
         use_ray_pose=use_ray_pose,
-        reference_view_strategy=reference_view_strategy,
+        ref_view_strategy=ref_view_strategy,
         conf_thresh_percentile=conf_thresh_percentile,
         num_max_points=num_max_points,
         show_cameras=show_cameras,
@@ -753,7 +753,7 @@ def gradio(
         # Prepare launch arguments
         launch_kwargs = {"share": share, "debug": debug}
 
-        app.launch(host=host, port=port, **launch_kwargs)
+        app.launch(host=host, port=port, allowed_paths=[workspace_dir, gallery_dir], **launch_kwargs)
 
     except KeyboardInterrupt:
         typer.echo("\nGradio application stopped.")

@@ -27,7 +27,6 @@ import torch
 
 from depth_anything_3.api import DepthAnything3
 from depth_anything_3.utils.memory import cleanup_cuda_memory
-from depth_anything_3.utils.export.glb import export_to_glb
 from depth_anything_3.utils.export.gs import export_to_gs_video
 
 
@@ -128,26 +127,28 @@ class ModelInference:
         method_mapping = {"high_res": "lower_bound_resize", "low_res": "upper_bound_resize"}
         actual_method = method_mapping.get(process_res_method, "upper_bound_crop")
 
-        # Run model inference
+        # Run model inference with all export formats
         print(f"Running inference with method: {actual_method}")
         with torch.no_grad():
             prediction = self.model.inference(
                 image_paths,
-                export_dir=None,
+                export_dir=target_dir,
+                export_format="mini_npz-glb-feat_vis",
+                export_feat_layers=[],  # Empty by default to avoid assertion errors - feat_vis will export if features exist
                 process_res_method=actual_method,
                 infer_gs=infer_gs,
                 ref_view_strategy=ref_view_strategy,
+                conf_thresh_percentile=save_percentage,
+                num_max_points=int(num_max_points),
+                show_cameras=show_camera,
+                feat_vis_fps=15,
+                export_kwargs={
+                    "glb": {
+                        "filter_black_bg": filter_black_bg,
+                        "filter_white_bg": filter_white_bg,
+                    }
+                },
             )
-        # num_max_points: int = 1_000_000,
-        export_to_glb(
-            prediction,
-            filter_black_bg=filter_black_bg,
-            filter_white_bg=filter_white_bg,
-            export_dir=target_dir,
-            show_cameras=show_camera,
-            conf_thresh_percentile=save_percentage,
-            num_max_points=int(num_max_points),
-        )
 
         # export to gs video if needed
         if infer_gs:

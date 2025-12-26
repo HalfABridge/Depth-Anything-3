@@ -156,6 +156,9 @@ class EventHandlers:
         Optional[str],  # gs video path
         gr.update,  # gs video visibility update
         gr.update,  # gs info visibility update
+        Optional[str],  # mini_npz file path
+        Optional[str],  # glb file path
+        Optional[List[str]],  # feat_vis file paths
     ]:
         """
         Perform reconstruction using the already-created target_dir/images.
@@ -186,6 +189,9 @@ class EventHandlers:
                 None,
                 gr.update(visible=False),  # gs_video
                 gr.update(visible=True),  # gs_info
+                None,  # mini_npz file path
+                None,  # glb file path
+                None,  # feat_vis file paths
             )
 
         start_time = time.time()
@@ -247,6 +253,19 @@ class EventHandlers:
             processed_data
         )
 
+        # Find exported file paths
+        mini_npz_path = os.path.join(target_dir, "exports", "mini_npz", "results.npz")
+        mini_npz_path = mini_npz_path if os.path.exists(mini_npz_path) else None
+
+        glb_path = os.path.join(target_dir, "scene.glb")
+        glb_path = glb_path if os.path.exists(glb_path) else None
+
+        feat_vis_dir = os.path.join(target_dir, "feat_vis")
+        feat_vis_paths = None
+        if os.path.exists(feat_vis_dir):
+            feat_vis_files = sorted(glob(os.path.join(feat_vis_dir, "*.mp4")))
+            feat_vis_paths = feat_vis_files if feat_vis_files else None
+
         return (
             glbfile,
             log_msg,
@@ -258,6 +277,9 @@ class EventHandlers:
             gsvideo_path,
             gr.update(visible=gs_video_visible),  # gs_video visibility
             gr.update(visible=gs_info_visible),  # gs_info visibility
+            mini_npz_path,  # mini_npz file path
+            glb_path,  # glb file path
+            feat_vis_paths,  # feat_vis file paths
         )
 
     def update_visualization(
@@ -357,6 +379,9 @@ class EventHandlers:
         Optional[str],
         gr.update,
         gr.update,
+        Optional[str],  # mini_npz file path
+        Optional[str],  # glb file path
+        Optional[List[str]],  # feat_vis file paths
     ]:
         """
         Load a scene from examples directory.
@@ -434,6 +459,22 @@ class EventHandlers:
                 except Exception as e:
                     print(f"Error loading cached 3DGS video: {e}")
 
+        # Find exported file paths
+        mini_npz_path = None
+        glb_path = None
+        feat_vis_paths = None
+        if target_dir and target_dir != "None":
+            mini_npz_path_check = os.path.join(target_dir, "exports", "mini_npz", "results.npz")
+            mini_npz_path = mini_npz_path_check if os.path.exists(mini_npz_path_check) else None
+
+            glb_path_check = os.path.join(target_dir, "scene.glb")
+            glb_path = glb_path_check if os.path.exists(glb_path_check) else None
+
+            feat_vis_dir = os.path.join(target_dir, "feat_vis")
+            if os.path.exists(feat_vis_dir):
+                feat_vis_files = sorted(glob(os.path.join(feat_vis_dir, "*.mp4")))
+                feat_vis_paths = feat_vis_files if feat_vis_files else None
+
         return (
             reconstruction_output,
             target_dir,
@@ -444,6 +485,9 @@ class EventHandlers:
             gs_video_path,
             gr.update(visible=gs_video_visible),
             gr.update(visible=gs_info_visible),
+            mini_npz_path,  # mini_npz file path
+            glb_path,  # glb file path
+            feat_vis_paths,  # feat_vis file paths
         )
 
     def navigate_depth_view(

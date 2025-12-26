@@ -222,6 +222,11 @@ class DepthAnything3App:
                             with gr.Tab("3DGS Rendered Novel Views"):
                                 gs_video, gs_info = self.ui_components.create_nvs_video()
 
+                            with gr.Tab("Export Data"):
+                                mini_npz_file, glb_file, feat_vis_files = (
+                                    self.ui_components.create_export_data_section()
+                                )
+
                         # Inference control section (before inference)
                         (process_res_method_dropdown, infer_gs, ref_view_strategy_dropdown) = (
                             self.ui_components.create_inference_control_section()
@@ -294,6 +299,9 @@ class DepthAnything3App:
                 gs_info,
                 gs_trj_mode,
                 gs_video_quality,
+                mini_npz_file,
+                glb_file,
+                feat_vis_files,
             )
 
             # Acknowledgements
@@ -337,6 +345,9 @@ class DepthAnything3App:
         gs_info: gr.Markdown,
         gs_trj_mode: gr.Dropdown,
         gs_video_quality: gr.Dropdown,
+        mini_npz_file: gr.File,
+        glb_file: gr.File,
+        feat_vis_files: gr.File,
     ) -> None:
         """
         Set up all event handlers for the application.
@@ -388,6 +399,9 @@ class DepthAnything3App:
                 gs_video,
                 gs_video,  # gs_video visibility
                 gs_info,  # gs_info visibility
+                mini_npz_file,  # mini_npz file path
+                glb_file,  # glb file path
+                feat_vis_files,  # feat_vis file paths
             ],
         ).then(
             fn=lambda: "False",
@@ -452,6 +466,9 @@ class DepthAnything3App:
             measure_depth_image,
             gs_video,
             gs_info,
+            mini_npz_file,
+            glb_file,
+            feat_vis_files,
         )
 
     def _setup_visualization_handlers(
@@ -549,12 +566,15 @@ class DepthAnything3App:
         measure_depth_image: gr.Image,
         gs_video: gr.Video,
         gs_info: gr.Markdown,
+        mini_npz_file: gr.File,
+        glb_file: gr.File,
+        feat_vis_files: gr.File,
     ) -> None:
         """Set up example scene handlers."""
 
         def load_and_update_measure(name):
             result = self.event_handlers.load_example_scene(name)
-            # result = (reconstruction_output, target_dir, image_paths, log_message, processed_data, measure_view_selector, gs_video, gs_video_vis, gs_info_vis)  # noqa: E501
+            # result = (reconstruction_output, target_dir, image_paths, log_message, processed_data, measure_view_selector, gs_video, gs_video_vis, gs_info_vis, mini_npz_path, glb_path, feat_vis_paths)  # noqa: E501
 
             # Update measure view if processed_data is available
             measure_img = None
@@ -583,6 +603,9 @@ class DepthAnything3App:
                         is_example,
                         measure_image,
                         measure_depth_image,
+                        mini_npz_file,  # mini_npz file path
+                        glb_file,  # glb file path
+                        feat_vis_files,  # feat_vis file paths
                     ],
                 )
 
