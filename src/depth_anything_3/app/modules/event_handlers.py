@@ -20,6 +20,7 @@ This module handles all event callbacks and user interactions.
 
 import os
 import time
+import json
 from glob import glob
 from typing import Any, Dict, List, Optional, Tuple
 import gradio as gr
@@ -54,6 +55,169 @@ class EventHandlers:
         Display a quick log message while waiting.
         """
         return "Loading and Reconstructing..."
+
+    def evaluate_pose_json_match(
+        self,
+        input_video: Optional[Any],
+        input_images: Optional[List],
+        target_dir: Optional[str],
+        input_pose_json: Optional[Any],
+    ) -> Tuple[gr.update, Optional[Dict[str, Any]]]:
+        """
+        UI-only evaluation for pose JSON vs uploaded images.
+
+        Returns:
+            (pose_json_status_update, pose_data_or_none)
+        """
+
+        def _extract_path(file_obj: Any) -> Optional[str]:
+            if file_obj is None:
+                return None
+            if isinstance(file_obj, dict) and "name" in file_obj:
+                return file_obj["name"]
+            if hasattr(file_obj, "name"):
+                return getattr(file_obj, "name")
+            return str(file_obj)
+
+        def _update_hidden():
+            return gr.update(value="", visible=False), None
+
+        def _update_warn(msg: str):
+            return (
+                gr.update(
+                    value=msg,
+                    visible=True,
+                    elem_classes=["pose-json-status", "pose-json-status--warn"],
+                ),
+                None,
+            )
+
+        def _update_ok(msg: str, pose_data: Dict[str, Any]):
+            return (
+                gr.update(
+                    value=msg,
+                    visible=True,
+                    elem_classes=["pose-json-status", "pose-json-status--ok"],
+                ),
+                pose_data,
+            )
+
+        pose_json_path = _extract_path(input_pose_json)
+        if not pose_json_path:
+            return _update_hidden()
+
+        # If user uploaded a video, we do not attempt matching.
+        if input_video:
+            return _update_warn("No matching image data was found.")
+
+        # Prefer the copied images in target_dir/images as the source of truth.
+        image_basenames: List[str] = []
+        image_paths: List[str] = []
+
+        if target_dir and target_dir != "None" and os.path.isdir(target_dir):
+            image_folder_path = os.path.join(target_dir, "images")
+            if os.path.isdir(image_folder_path):
+                image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
+                image_paths = sorted(glob(os.path.join(image_folder_path, "*")))
+                image_paths = [
+                    p
+                    for p in image_paths
+                    if any(p.lower().endswith(ext) for ext in image_extensions)
+                ]
+                image_basenames = [os.path.basename(p) for p in image_paths]
+
+        if not image_basenames and input_images:
+            # Fall back to basenames from raw upload values
+            for file_data in input_images:
+                file_path = _extract_path(file_data)
+                if file_path:
+                    image_basenames.append(os.path.basename(file_path))
+            image_basenames = sorted(image_basenames)
+
+        if not image_basenames:
+            return _update_warn("No matching image data was found.")
+
+        # Hard error: duplicate uploaded basenames (should not happen per constraints)
+        if len(set(image_basenames)) != len(image_basenames):
+            dups = sorted({n for n in image_basenames if image_basenames.count(n) > 1})
+            return _update_warn(
+                "Uploaded images cannot be matched with JSON data (duplicate image names: "
+                + ", ".join(dups)
+                + ")."
+            )
+
+        # Parse JSON
+        try:
+            with open(pose_json_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception:
+            return _update_warn("Uploaded images cannot be matched with JSON data (invalid JSON).")
+
+        if not isinstance(payload, dict) or "ImageDatas" not in payload or not isinstance(
+            payload["ImageDatas"], list
+        ):
+            return _update_warn(
+                "Uploaded images cannot be matched with JSON data (missing 'ImageDatas')."
+            )
+
+        entries = payload["ImageDatas"]
+        json_names: List[str] = []
+        name_to_entry: Dict[str, Dict[str, Any]] = {}
+
+        for e in entries:
+            if not isinstance(e, dict):
+                return _update_warn(
+                    "Uploaded images cannot be matched with JSON data (invalid entry format)."
+                )
+            if "FileName" not in e or "IntrinsicArray" not in e:
+                return _update_warn(
+                    "Uploaded images cannot be matched with JSON data (missing keys)."
+                )
+            fname = os.path.basename(str(e["FileName"]))
+            extr = None
+            extr = e["ExtrinsicArray"]
+            intr = e["IntrinsicArray"]
+            if not isinstance(extr, list) or len(extr) != 16:
+                return _update_warn(
+                    "Uploaded images cannot be matched with JSON data (invalid WorldToMatrixArray)."
+                )
+            if not isinstance(intr, list) or len(intr) != 9:
+                return _update_warn(
+                    "Uploaded images cannot be matched with JSON data (invalid IntrinsicArray)."
+                )
+            json_names.append(fname)
+            name_to_entry[fname] = e
+
+        if len(set(json_names)) != len(json_names):
+            dups = sorted({n for n in json_names if json_names.count(n) > 1})
+            return _update_warn(
+                "Uploaded images cannot be matched with JSON data (duplicate JSON FileName: "
+                + ", ".join(dups)
+                + ")."
+            )
+
+        # Exact match on basenames.
+        if set(json_names) != set(image_basenames) or len(json_names) != len(image_basenames):
+            return _update_warn("Uploaded images cannot be matched with JSON data.")
+
+        # Determine inference order (matches ModelInference: sorted paths in target_dir/images).
+        if image_paths:
+            ordered_names = [os.path.basename(p) for p in image_paths]
+        else:
+            ordered_names = sorted(image_basenames)
+
+        def _reshape_rm(flat: List[float], r: int, c: int) -> List[List[float]]:
+            return [flat[i * c : (i + 1) * c] for i in range(r)]
+
+        exts: List[List[List[float]]] = []
+        ixts: List[List[List[float]]] = []
+        for name in ordered_names:
+            e = name_to_entry[name]
+            exts.append(_reshape_rm([float(x) for x in e["ExtrinsicArray"]], 4, 4))
+            ixts.append(_reshape_rm([float(x) for x in e["IntrinsicArray"]], 3, 3))
+
+        pose_data = {"filenames": ordered_names, "extrinsics": exts, "intrinsics": ixts}
+        return _update_ok("Match successful.", pose_data)
 
     def save_current_visualization(
         self,
@@ -145,6 +309,7 @@ class EventHandlers:
         ref_view_strategy: str = "saddle_balanced",
         gs_trj_mode: str = "extend",
         gs_video_quality: str = "high",
+        pose_data_state: Optional[Dict[str, Any]] = None,
     ) -> Tuple[
         Optional[str],
         str,
@@ -158,7 +323,9 @@ class EventHandlers:
         gr.update,  # gs info visibility update
         Optional[str],  # mini_npz file path
         Optional[str],  # glb file path
-        Optional[List[str]],  # feat_vis file paths
+        Optional[str],  # gs_ply file path
+        Optional[Dict[str, Any]],  # camera params json view
+        Optional[str],  # camera params json file path
     ]:
         """
         Perform reconstruction using the already-created target_dir/images.
@@ -191,7 +358,9 @@ class EventHandlers:
                 gr.update(visible=True),  # gs_info
                 None,  # mini_npz file path
                 None,  # glb file path
-                None,  # feat_vis file paths
+                None,  # gs_ply file path
+                None,  # camera params json view
+                None,  # camera params json file path
             )
 
         start_time = time.time()
@@ -206,6 +375,12 @@ class EventHandlers:
         print("Running DepthAnything3 model...")
         print(f"Reference view strategy: {ref_view_strategy}")
 
+        extrinsics = None
+        intrinsics = None
+        if pose_data_state and isinstance(pose_data_state, dict):
+            extrinsics = np.array(pose_data_state.get("extrinsics"), dtype=np.float32)
+            intrinsics = np.array(pose_data_state.get("intrinsics"), dtype=np.float32)
+
         with torch.no_grad():
             prediction, processed_data = self.model_inference.run_inference(
                 target_dir,
@@ -217,6 +392,8 @@ class EventHandlers:
                 ref_view_strategy=ref_view_strategy,
                 gs_trj_mode=gs_trj_mode,
                 gs_video_quality=gs_video_quality,
+                extrinsics=extrinsics,
+                intrinsics=intrinsics,
             )
 
         # The GLB file is already generated by the API
@@ -260,11 +437,48 @@ class EventHandlers:
         glb_path = os.path.join(target_dir, "scene.glb")
         glb_path = glb_path if os.path.exists(glb_path) else None
 
-        feat_vis_dir = os.path.join(target_dir, "feat_vis")
-        feat_vis_paths = None
-        if os.path.exists(feat_vis_dir):
-            feat_vis_files = sorted(glob(os.path.join(feat_vis_dir, "*.mp4")))
-            feat_vis_paths = feat_vis_files if feat_vis_files else None
+        gs_ply_path = os.path.join(target_dir, "gs_ply", "0000.ply")
+        gs_ply_path = gs_ply_path if os.path.exists(gs_ply_path) else None
+
+        # Build camera parameters JSON (if available)
+        camera_params_json_view = None
+        camera_params_json_file = None
+        try:
+            pred_ext = getattr(prediction, "extrinsics", None)
+            pred_ixt = getattr(prediction, "intrinsics", None)
+            if pred_ext is not None and pred_ixt is not None:
+                exts_np = np.asarray(pred_ext)
+                ixts_np = np.asarray(pred_ixt)
+
+                # Normalize extrinsics to (N, 4, 4) for export
+                if exts_np.ndim == 3 and exts_np.shape[-2:] == (3, 4):
+                    n = exts_np.shape[0]
+                    exts_44 = np.zeros((n, 4, 4), dtype=np.float64)
+                    exts_44[:, :3, :4] = exts_np.astype(np.float64)
+                    exts_44[:, 3, 3] = 1.0
+                    exts_np = exts_44
+
+                if exts_np.ndim == 3 and exts_np.shape[-2:] == (4, 4) and ixts_np.ndim == 3 and ixts_np.shape[-2:] == (3, 3):
+                    image_datas = []
+                    for i in range(exts_np.shape[0]):
+                        image_datas.append(
+                            {
+                                "ExtrinsicArray": [float(x) for x in exts_np[i].reshape(-1).tolist()],
+                                "IntrinsicArray": [float(x) for x in ixts_np[i].reshape(-1).tolist()],
+                            }
+                        )
+
+                    camera_params_json_view = {"CameraParams": image_datas}
+
+                    export_dir = os.path.join(target_dir, "exports", "camera_parameters")
+                    os.makedirs(export_dir, exist_ok=True)
+                    camera_params_json_file = os.path.join(export_dir, "camera_parameters.json")
+                    with open(camera_params_json_file, "w", encoding="utf-8") as f:
+                        json.dump(camera_params_json_view, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Warning: Failed to build camera parameters JSON: {e}")
+            camera_params_json_view = None
+            camera_params_json_file = None
 
         return (
             glbfile,
@@ -279,7 +493,9 @@ class EventHandlers:
             gr.update(visible=gs_info_visible),  # gs_info visibility
             mini_npz_path,  # mini_npz file path
             glb_path,  # glb file path
-            feat_vis_paths,  # feat_vis file paths
+            gs_ply_path,  # gs_ply file path
+            camera_params_json_view,  # camera params json view
+            camera_params_json_file,  # camera params json file
         )
 
     def update_visualization(
@@ -381,7 +597,7 @@ class EventHandlers:
         gr.update,
         Optional[str],  # mini_npz file path
         Optional[str],  # glb file path
-        Optional[List[str]],  # feat_vis file paths
+        Optional[str],  # gs_ply file path
     ]:
         """
         Load a scene from examples directory.
@@ -462,7 +678,7 @@ class EventHandlers:
         # Find exported file paths
         mini_npz_path = None
         glb_path = None
-        feat_vis_paths = None
+        gs_ply_path = None
         if target_dir and target_dir != "None":
             mini_npz_path_check = os.path.join(target_dir, "exports", "mini_npz", "results.npz")
             mini_npz_path = mini_npz_path_check if os.path.exists(mini_npz_path_check) else None
@@ -470,10 +686,8 @@ class EventHandlers:
             glb_path_check = os.path.join(target_dir, "scene.glb")
             glb_path = glb_path_check if os.path.exists(glb_path_check) else None
 
-            feat_vis_dir = os.path.join(target_dir, "feat_vis")
-            if os.path.exists(feat_vis_dir):
-                feat_vis_files = sorted(glob(os.path.join(feat_vis_dir, "*.mp4")))
-                feat_vis_paths = feat_vis_files if feat_vis_files else None
+            gs_ply_path_check = os.path.join(target_dir, "gs_ply", "0000.ply")
+            gs_ply_path = gs_ply_path_check if os.path.exists(gs_ply_path_check) else None
 
         return (
             reconstruction_output,
@@ -487,7 +701,7 @@ class EventHandlers:
             gr.update(visible=gs_info_visible),
             mini_npz_path,  # mini_npz file path
             glb_path,  # glb file path
-            feat_vis_paths,  # feat_vis file paths
+            gs_ply_path,  # gs_ply file path
         )
 
     def navigate_depth_view(

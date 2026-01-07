@@ -215,6 +215,39 @@ GRADIO_CSS = """
     animation: techGradient 3s ease infinite;
 }
 
+/* Pose JSON status (below Upload Data JSON) */
+.pose-json-status {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+}
+
+@media (prefers-color-scheme: light) {
+    .pose-json-status.pose-json-status--ok {
+        background: rgba(16, 185, 129, 0.18); /* light green tint */
+        border-color: rgba(16, 185, 129, 0.35);
+        color: #1e293b;
+    }
+    .pose-json-status.pose-json-status--warn {
+        background: rgba(245, 158, 11, 0.18); /* light yellow tint */
+        border-color: rgba(245, 158, 11, 0.35);
+        color: #1e293b;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .pose-json-status.pose-json-status--ok {
+        background: rgba(16, 185, 129, 0.16); /* muted green tint for dark mode */
+        border-color: rgba(16, 185, 129, 0.28);
+        color: #e8eaed;
+    }
+    .pose-json-status.pose-json-status--warn {
+        background: rgba(245, 158, 11, 0.14); /* muted yellow tint for dark mode */
+        border-color: rgba(245, 158, 11, 0.26);
+        color: #e8eaed;
+    }
+}
+
 @keyframes techGradient {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }

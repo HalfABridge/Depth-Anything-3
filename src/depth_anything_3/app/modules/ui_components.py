@@ -33,12 +33,15 @@ class UIComponents:
     def __init__(self):
         """Initialize the UI components handler."""
 
-    def create_upload_section(self) -> Tuple[gr.Video, gr.Slider, gr.File, gr.Gallery]:
+    def create_upload_section(
+        self,
+    ) -> Tuple[gr.Video, gr.Slider, gr.File, gr.File, gr.Markdown, gr.Gallery]:
         """
         Create the upload section with video, images, and gallery components.
 
         Returns:
-            A tuple of Gradio components: (input_video, s_time_interval, input_images, image_gallery).
+            A tuple of Gradio components:
+            (input_video, s_time_interval, input_images, input_pose_json, pose_json_status, image_gallery).
         """
         input_video = gr.Video(label="Upload Video", interactive=True)
         s_time_interval = gr.Slider(
@@ -51,6 +54,17 @@ class UIComponents:
             visible=True,
         )
         input_images = gr.File(file_count="multiple", label="Upload Images", interactive=True)
+        input_pose_json = gr.File(
+            file_count="single",
+            label="Upload Data JSON",
+            interactive=True,
+            file_types=[".json"],
+        )
+        pose_json_status = gr.Markdown(
+            "",
+            visible=False,
+            elem_classes=["pose-json-status"],
+        )
         image_gallery = gr.Gallery(
             label="Preview",
             columns=4,
@@ -61,7 +75,7 @@ class UIComponents:
             interactive=False,
         )
 
-        return input_video, s_time_interval, input_images, image_gallery
+        return input_video, s_time_interval, input_images, input_pose_json, pose_json_status, image_gallery
 
     def create_3d_viewer_section(self) -> gr.Model3D:
         """
@@ -113,7 +127,7 @@ class UIComponents:
         Create the export data section with download links for exported files.
 
         Returns:
-            Tuple of (mini_npz_file, glb_file, feat_vis_files) components
+            Tuple of (mini_npz_file, glb_file, gs_ply_file) components
         """
         gr.Markdown("### Download Exported Data")
         gr.Markdown(
@@ -143,19 +157,45 @@ class UIComponents:
             interactive=False,
         )
 
-        gr.Markdown("#### 🔍 Feature Visualization Videos")
+        gr.Markdown("#### ✨ Gaussian Splatting Point Cloud (PLY)")
         gr.Markdown(
-            "Feature visualization videos showing intermediate transformer features from different layers. "
-            "Multiple videos are generated (one per layer: 9, 19, 29, 39)."
+            "Gaussian Splatting point cloud format in PLY format. Compatible with standard 3DGS viewers such as "
+            "[SuperSplat](https://superspl.at/editor) (recommended) and [SPARK](https://sparkjs.dev/viewer/). "
+            "**Note:** Only available when using da3-giant or da3nested-giant-large models. "
+            "If your model doesn't support this format, the download will be unavailable."
         )
-        feat_vis_files = gr.File(
-            label="Download Feature Visualization Videos",
-            file_count="multiple",
+        gs_ply_file = gr.File(
+            label="Download Gaussian Splatting PLY",
             visible=True,
             interactive=False,
         )
 
-        return mini_npz_file, glb_file, feat_vis_files
+        return mini_npz_file, glb_file, gs_ply_file
+
+    def create_camera_parameters_section(self) -> Tuple[gr.JSON, gr.File]:
+        """
+        Create the camera parameters export section.
+
+        Returns:
+            Tuple of (camera_params_json_view, camera_params_json_file)
+        """
+        gr.Markdown("### Camera Parameters (Extrinsics & Intrinsics)")
+        gr.Markdown(
+            "If camera parameters were estimated or provided, they can be exported here in JSON format. "
+            "The list order corresponds to the input image order."
+        )
+
+        camera_params_json_view = gr.JSON(
+            label="Camera Parameters JSON",
+            value=None,
+        )
+        camera_params_json_file = gr.File(
+            label="Download Camera Parameters JSON",
+            visible=True,
+            interactive=False,
+        )
+
+        return camera_params_json_view, camera_params_json_file
 
     def create_depth_section(self) -> Tuple[gr.Button, gr.Dropdown, gr.Button, gr.Image]:
         """

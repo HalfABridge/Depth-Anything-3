@@ -173,6 +173,7 @@ class DepthAnything3App:
             processed_data_state = gr.State(value=None)
             measure_points_state = gr.State(value=[])
             selected_image_index_state = gr.State(value=0)  # Track selected image index
+            pose_data_state = gr.State(value=None)
             # current_view_index = gr.State(value=0)  # noqa: F841 Track current view index
 
             # Header and description
@@ -189,6 +190,8 @@ class DepthAnything3App:
                         input_video,
                         s_time_interval,
                         input_images,
+                        input_pose_json,
+                        pose_json_status,
                         image_gallery,
                     ) = self.ui_components.create_upload_section()
 
@@ -223,8 +226,13 @@ class DepthAnything3App:
                                 gs_video, gs_info = self.ui_components.create_nvs_video()
 
                             with gr.Tab("Export Data"):
-                                mini_npz_file, glb_file, feat_vis_files = (
+                                mini_npz_file, glb_file, gs_ply_file = (
                                     self.ui_components.create_export_data_section()
+                                )
+
+                            with gr.Tab("Camera Parameters"):
+                                camera_params_json_view, camera_params_json_file = (
+                                    self.ui_components.create_camera_parameters_section()
                                 )
 
                         # Inference control section (before inference)
@@ -269,9 +277,12 @@ class DepthAnything3App:
                 is_example,
                 processed_data_state,
                 measure_points_state,
+                pose_data_state,
                 target_dir_output,
                 input_video,
                 input_images,
+                input_pose_json,
+                pose_json_status,
                 s_time_interval,
                 image_gallery,
                 reconstruction_output,
@@ -301,7 +312,9 @@ class DepthAnything3App:
                 gs_video_quality,
                 mini_npz_file,
                 glb_file,
-                feat_vis_files,
+                gs_ply_file,
+                camera_params_json_view,
+                camera_params_json_file,
             )
 
             # Acknowledgements
@@ -315,9 +328,12 @@ class DepthAnything3App:
         is_example: gr.Textbox,
         processed_data_state: gr.State,
         measure_points_state: gr.State,
+        pose_data_state: gr.State,
         target_dir_output: gr.Textbox,
         input_video: gr.Video,
         input_images: gr.File,
+        input_pose_json: gr.File,
+        pose_json_status: gr.Markdown,
         s_time_interval: gr.Slider,
         image_gallery: gr.Gallery,
         reconstruction_output: gr.Model3D,
@@ -347,7 +363,9 @@ class DepthAnything3App:
         gs_video_quality: gr.Dropdown,
         mini_npz_file: gr.File,
         glb_file: gr.File,
-        feat_vis_files: gr.File,
+        gs_ply_file: gr.File,
+        camera_params_json_view: gr.JSON,
+        camera_params_json_file: gr.File,
     ) -> None:
         """
         Set up all event handlers for the application.
@@ -361,11 +379,15 @@ class DepthAnything3App:
             [
                 input_video,
                 input_images,
+                input_pose_json,
                 reconstruction_output,
                 log_output,
                 target_dir_output,
                 image_gallery,
                 gs_video,
+                pose_json_status,
+                camera_params_json_view,
+                camera_params_json_file,
             ]
         )
 
@@ -387,6 +409,7 @@ class DepthAnything3App:
                 ref_view_strategy_dropdown,
                 gs_trj_mode,
                 gs_video_quality,
+                pose_data_state,
             ],
             outputs=[
                 reconstruction_output,
@@ -401,7 +424,9 @@ class DepthAnything3App:
                 gs_info,  # gs_info visibility
                 mini_npz_file,  # mini_npz file path
                 glb_file,  # glb file path
-                feat_vis_files,  # feat_vis file paths
+                gs_ply_file,  # gs_ply file path
+                camera_params_json_view,  # camera params JSON view
+                camera_params_json_file,  # camera params JSON file
             ],
         ).then(
             fn=lambda: "False",
@@ -426,11 +451,24 @@ class DepthAnything3App:
             fn=self.event_handlers.handle_uploads,
             inputs=[input_video, input_images, s_time_interval],
             outputs=[reconstruction_output, target_dir_output, image_gallery, log_output],
+        ).then(
+            fn=self.event_handlers.evaluate_pose_json_match,
+            inputs=[input_video, input_images, target_dir_output, input_pose_json],
+            outputs=[pose_json_status, pose_data_state],
         )
         input_images.change(
             fn=self.event_handlers.handle_uploads,
             inputs=[input_video, input_images, s_time_interval],
             outputs=[reconstruction_output, target_dir_output, image_gallery, log_output],
+        ).then(
+            fn=self.event_handlers.evaluate_pose_json_match,
+            inputs=[input_video, input_images, target_dir_output, input_pose_json],
+            outputs=[pose_json_status, pose_data_state],
+        )
+        input_pose_json.change(
+            fn=self.event_handlers.evaluate_pose_json_match,
+            inputs=[input_video, input_images, target_dir_output, input_pose_json],
+            outputs=[pose_json_status, pose_data_state],
         )
 
         # Navigation handlers
@@ -468,7 +506,7 @@ class DepthAnything3App:
             gs_info,
             mini_npz_file,
             glb_file,
-            feat_vis_files,
+            gs_ply_file,
         )
 
     def _setup_visualization_handlers(
@@ -568,13 +606,13 @@ class DepthAnything3App:
         gs_info: gr.Markdown,
         mini_npz_file: gr.File,
         glb_file: gr.File,
-        feat_vis_files: gr.File,
+        gs_ply_file: gr.File,
     ) -> None:
         """Set up example scene handlers."""
 
         def load_and_update_measure(name):
             result = self.event_handlers.load_example_scene(name)
-            # result = (reconstruction_output, target_dir, image_paths, log_message, processed_data, measure_view_selector, gs_video, gs_video_vis, gs_info_vis, mini_npz_path, glb_path, feat_vis_paths)  # noqa: E501
+            # result = (reconstruction_output, target_dir, image_paths, log_message, processed_data, measure_view_selector, gs_video, gs_video_vis, gs_info_vis, mini_npz_path, glb_path, gs_ply_path)  # noqa: E501
 
             # Update measure view if processed_data is available
             measure_img = None
@@ -605,7 +643,7 @@ class DepthAnything3App:
                         measure_depth_image,
                         mini_npz_file,  # mini_npz file path
                         glb_file,  # glb file path
-                        feat_vis_files,  # feat_vis file paths
+                        gs_ply_file,  # gs_ply file path
                     ],
                 )
 

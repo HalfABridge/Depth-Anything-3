@@ -71,6 +71,8 @@ class ModelInference:
         ref_view_strategy: str = "saddle_balanced",
         gs_trj_mode: str = "extend",
         gs_video_quality: str = "high",
+        extrinsics: Optional[np.ndarray] = None,
+        intrinsics: Optional[np.ndarray] = None,
     ) -> Tuple[Any, Dict[int, Dict[str, Any]]]:
         """
         Run DepthAnything3 model inference on images.
@@ -129,26 +131,60 @@ class ModelInference:
 
         # Run model inference with all export formats
         print(f"Running inference with method: {actual_method}")
+        # Enable infer_gs for gs_ply export (required by API)
+        # If model doesn't support it, the export will fail gracefully
+        infer_gs_for_export = True  # Always enable for gs_ply export
+        
         with torch.no_grad():
-            prediction = self.model.inference(
-                image_paths,
-                export_dir=target_dir,
-                export_format="mini_npz-glb-feat_vis",
-                export_feat_layers=[],  # Empty by default to avoid assertion errors - feat_vis will export if features exist
-                process_res_method=actual_method,
-                infer_gs=infer_gs,
-                ref_view_strategy=ref_view_strategy,
-                conf_thresh_percentile=save_percentage,
-                num_max_points=int(num_max_points),
-                show_cameras=show_camera,
-                feat_vis_fps=15,
-                export_kwargs={
-                    "glb": {
-                        "filter_black_bg": filter_black_bg,
-                        "filter_white_bg": filter_white_bg,
-                    }
-                },
-            )
+            try:
+                prediction = self.model.inference(
+                    image_paths,
+                    extrinsics=extrinsics,
+                    intrinsics=intrinsics,
+                    export_dir=target_dir,
+                    export_format="mini_npz-glb-gs_ply",
+                    process_res_method=actual_method,
+                    infer_gs=infer_gs_for_export,
+                    ref_view_strategy=ref_view_strategy,
+                    conf_thresh_percentile=save_percentage,
+                    num_max_points=int(num_max_points),
+                    show_cameras=show_camera,
+                    export_kwargs={
+                        "glb": {
+                            "filter_black_bg": filter_black_bg,
+                            "filter_white_bg": filter_white_bg,
+                        }
+                    },
+                )
+            except (AssertionError, AttributeError) as e:
+                # Model doesn't support gs_ply (either infer_gs requirement or gaussians is None)
+                # Fall back to exporting without gs_ply
+                if isinstance(e, AssertionError) and "infer_gs" in str(e).lower():
+                    print(f"Warning: Model doesn't support gs_ply export (infer_gs requirement): {e}")
+                elif isinstance(e, AttributeError) and "gaussians" in str(e).lower():
+                    print(f"Warning: Model doesn't support gs_ply export (gaussians not available): {e}")
+                else:
+                    print(f"Warning: gs_ply export failed: {e}")
+                print("Falling back to mini_npz-glb export only")
+                prediction = self.model.inference(
+                    image_paths,
+                    extrinsics=extrinsics,
+                    intrinsics=intrinsics,
+                    export_dir=target_dir,
+                    export_format="mini_npz-glb",
+                    process_res_method=actual_method,
+                    infer_gs=infer_gs,
+                    ref_view_strategy=ref_view_strategy,
+                    conf_thresh_percentile=save_percentage,
+                    num_max_points=int(num_max_points),
+                    show_cameras=show_camera,
+                    export_kwargs={
+                        "glb": {
+                            "filter_black_bg": filter_black_bg,
+                            "filter_white_bg": filter_white_bg,
+                        }
+                    },
+                )
 
         # export to gs video if needed
         if infer_gs:
